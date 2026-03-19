@@ -1,0 +1,721 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CEE-AP | Painel Educacional</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <style>
+        /* Paleta Institucional */
+        :root { --gov-navy: #0F172A; --gov-blue: #003399; --gov-emerald: #10B981; }
+        body { font-family: 'Inter', sans-serif; background: #F1F5F9; color: #1E293B; }
+        .tab-active { border-bottom: 3px solid var(--gov-blue); color: var(--gov-blue); font-weight: 800; }
+        .pro-card { background: white; border: 1px solid #E2E8F0; border-radius: 16px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); transition: all 0.3s ease; }
+        .pro-card:hover { box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); }
+        
+        .custom-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
+        .custom-scroll::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 10px; }
+
+        /* ======== OTIMIZAÇÃO PARA IMPRESSÃO ======== */
+        @media print {
+            @page { size: A4 landscape; margin: 10mm; }
+            * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+            body, html { background: white !important; height: auto !important; overflow: visible !important; font-size: 10pt !important; }
+            .no-print { display: none !important; }
+            #mainContainer, main, #main-scroll-container { overflow: visible !important; height: auto !important; display: block !important; padding: 0 !important; margin: 0 !important; }
+            .pro-card { border: 1px solid #E2E8F0 !important; box-shadow: none !important; page-break-inside: avoid; margin-bottom: 15px !important; padding: 12px !important; border-radius: 8px !important; }
+            .grid.grid-cols-1.md\:grid-cols-2.lg\:grid-cols-5 { display: flex !important; flex-wrap: nowrap !important; gap: 10px !important; margin-bottom: 20px !important; }
+            .grid.grid-cols-1.md\:grid-cols-2.lg\:grid-cols-5 > div { flex: 1 !important; padding: 10px !important; border-bottom-width: 3px !important; }
+            .grid.grid-cols-1.md\:grid-cols-2.lg\:grid-cols-5 > div h3 { font-size: 16pt !important; margin-top: 4px !important; }
+            #tab-listagem, #tab-graficos, #tab-cessadas { display: block !important; overflow: visible !important; height: auto !important; }
+            table { width: 100% !important; border-collapse: collapse !important; table-layout: auto !important; }
+            thead { display: table-header-group !important; }
+            tr { page-break-inside: avoid !important; }
+            th, td { word-wrap: break-word !important; white-space: normal !important; padding: 8px !important; font-size: 9pt !important; }
+            .grid.grid-cols-1.xl\:grid-cols-3, .grid.grid-cols-1.xl\:grid-cols-2 { display: flex !important; flex-wrap: nowrap !important; gap: 15px !important; }
+            .xl\:col-span-1 { flex: 1 !important; }
+            .xl\:col-span-2 { flex: 1.5 !important; }
+            .h-64, .h-72, .lg\:h-80 { height: 200px !important; }
+            canvas { max-width: 100% !important; max-height: 200px !important; }
+        }
+    </style>
+</head>
+<body class="h-screen flex flex-col overflow-hidden text-slate-800">
+
+    <div id="validationModal" class="fixed inset-0 bg-slate-900/60 z-[100] hidden flex items-center justify-center backdrop-blur-sm transition-opacity">
+        <div class="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full relative">
+            <button onclick="closeValidationModal()" class="absolute top-4 right-4 text-slate-400 hover:text-slate-600"><i data-lucide="x" class="w-5 h-5"></i></button>
+            <div class="text-center mb-6">
+                <div class="w-12 h-12 bg-blue-50 text-[#003399] rounded-full flex items-center justify-center mx-auto mb-3"><i data-lucide="shield-check" class="w-6 h-6"></i></div>
+                <h2 class="text-lg font-black text-[#003399] uppercase tracking-wider">Validar Certidão</h2>
+                <p class="text-xs text-slate-500 mt-1">Insira o código de autenticidade impresso na certidão.</p>
+            </div>
+            <input type="text" id="certCodeInput" placeholder="Ex: CEE-AP-ABC123XYZ" class="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl text-center text-sm font-black text-slate-700 outline-none focus:ring-2 focus:ring-[#003399] uppercase transition-all mb-4">
+            <button onclick="validateCertificate()" class="w-full bg-[#003399] hover:bg-blue-800 text-white font-black uppercase tracking-widest py-4 rounded-xl transition-all shadow-md text-xs">Verificar Autenticidade</button>
+            <div id="validationResult" class="mt-4 text-center hidden p-4 rounded-xl text-xs font-bold"></div>
+        </div>
+    </div>
+
+    <div class="hidden print:block w-full border-b-4 border-[#003399] pb-4 mb-4">
+        <div class="flex justify-between items-start">
+            <div class="flex gap-4 items-center">
+                <div class="bg-white p-2 rounded-xl h-20 w-auto flex items-center justify-center border">
+                    <img src="https://scontent.fmcp1-1.fna.fbcdn.net/v/t39.30808-6/616032336_1190834643222948_3300082200552265159_n.png?_nc_cat=101&ccb=1-7&_nc_sid=2a1932&_nc_ohc=krM6LeQ8zSwQ7kNvwEvu60A&_nc_oc=AdkoApmGuBTFzX8j5wwlJu4Oatypc_ttGQV7gjBxLrusi-pFWFEpMJgBojG9l6zeM1hU67D494p6fPkYal9V7NxS&_nc_zt=23&_nc_ht=scontent.fmcp1-1.fna&_nc_gid=afFyza42hgjT2J012C48BA&_nc_ss=8&oh=00_AfxVR3mHfES3ohEL0ysvYUfDOjBstNndFceLN-_ITpmlsQ&oe=69BD12CD" alt="Logo CEE-AP" class="h-16 w-auto object-contain">
+                </div>
+                <div>
+                    <h1 class="text-xl font-black text-[#003399]">CONSELHO ESTADUAL DE EDUCAÇÃO DO AMAPÁ</h1>
+                    <h2 class="text-sm font-bold text-slate-600 uppercase tracking-tighter">Monitoramento do Sistema de Ensino</h2>
+                </div>
+            </div>
+            <div class="text-right mt-2">
+                <p class="text-[9px] font-black uppercase text-slate-400">Relatório Consolidado</p>
+                <p id="print-timestamp" class="text-[10px] font-bold text-[#003399]"></p>
+            </div>
+        </div>
+    </div>
+
+    <header class="bg-[#003399] text-white px-4 lg:px-8 py-3 lg:py-4 flex flex-wrap lg:flex-nowrap justify-between items-center z-50 no-print flex-shrink-0 shadow-lg gap-4">
+        <div class="flex items-center gap-3 lg:gap-6 w-full lg:w-auto justify-between lg:justify-start">
+            <div class="flex items-center gap-3">
+                <button onclick="toggleSidebar()" class="lg:hidden p-2 bg-white/10 rounded-lg hover:bg-white/20 transition-all">
+                    <i data-lucide="menu" class="w-5 h-5"></i>
+                </button>
+                <div class="bg-white p-1.5 lg:p-2 rounded-xl lg:rounded-2xl shadow-lg h-12 lg:h-20 w-auto flex items-center justify-center overflow-hidden">
+                    <img src="https://scontent.fmcp1-1.fna.fbcdn.net/v/t39.30808-6/616032336_1190834643222948_3300082200552265159_n.png?_nc_cat=101&ccb=1-7&_nc_sid=2a1932&_nc_ohc=krM6LeQ8zSwQ7kNvwEvu60A&_nc_oc=AdkoApmGuBTFzX8j5wwlJu4Oatypc_ttGQV7gjBxLrusi-pFWFEpMJgBojG9l6zeM1hU67D494p6fPkYal9V7NxS&_nc_zt=23&_nc_ht=scontent.fmcp1-1.fna&_nc_gid=afFyza42hgjT2J012C48BA&_nc_ss=8&oh=00_AfxVR3mHfES3ohEL0ysvYUfDOjBstNndFceLN-_ITpmlsQ&oe=69BD12CD" alt="Logo CEE-AP" class="h-8 lg:h-16 w-auto object-contain">
+                </div>
+                <div>
+                    <h1 class="text-sm lg:text-lg font-extrabold uppercase tracking-tight leading-none">CONSELHO ESTADUAL DE EDUCAÇÃO DO AMAPÁ <span class="hidden sm:inline">- CEE/AP</span></h1>
+                    <p class="text-[9px] lg:text-[10px] text-blue-200 font-bold uppercase tracking-[0.1em] lg:tracking-[0.2em] mt-1.5">Painel de Monitoramento</p>
+                </div>
+            </div>
+            
+            <div class="flex items-center gap-2 lg:hidden">
+                <button onclick="window.print()" class="bg-white text-[#003399] p-2 rounded-lg text-xs font-black shadow-md"><i data-lucide="printer" class="w-4 h-4"></i></button>
+            </div>
+        </div>
+
+        <div class="hidden lg:flex items-center gap-3">
+            <button onclick="openValidationModal()" class="bg-blue-800 border border-blue-400/50 hover:bg-blue-700 text-white px-4 py-2.5 rounded-xl text-xs font-black flex items-center gap-2 transition-all shadow-md mr-2">
+                <i data-lucide="shield-check" class="w-4 h-4"></i> VALIDAR CERTIDÃO
+            </button>
+            <span id="live-indicator" class="flex items-center gap-2 text-[10px] font-bold bg-white/10 px-3 py-1.5 rounded-full text-emerald-300 mr-2">
+                <span class="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></span> SISTEMA ONLINE
+            </span>
+            <button onclick="window.print()" class="bg-white text-[#003399] hover:bg-slate-50 px-5 py-2.5 rounded-xl text-xs font-black flex items-center gap-2 transition-all shadow-md">
+                <i data-lucide="printer" class="w-4 h-4"></i> EXPORTAR RELATÓRIO
+            </button>
+        </div>
+    </header>
+
+    <div id="mainContainer" class="flex flex-1 overflow-hidden relative">
+        
+        <div id="sidebarOverlay" onclick="toggleSidebar()" class="fixed inset-0 bg-slate-900/50 z-30 hidden lg:hidden transition-opacity"></div>
+        
+        <aside id="sidebar" class="absolute inset-y-0 left-0 transform -translate-x-full lg:relative lg:translate-x-0 transition duration-300 ease-in-out z-40 w-80 bg-white border-r border-slate-200 p-6 lg:p-8 space-y-8 overflow-y-auto no-print h-full custom-scroll shadow-2xl lg:shadow-none">
+            
+            <div class="flex justify-between items-center lg:hidden mb-2">
+                <h2 class="text-sm font-black text-[#003399] uppercase tracking-widest">Filtros Avançados</h2>
+                <button onclick="toggleSidebar()" class="p-2 bg-slate-100 rounded-lg text-slate-600 hover:bg-slate-200"><i data-lucide="x" class="w-5 h-5"></i></button>
+            </div>
+
+            <section class="relative z-50">
+                <label class="text-[10px] font-black text-[#003399] uppercase tracking-widest block mb-4">Buscar Instituição</label>
+                <div class="relative">
+                    <input type="text" id="searchInput" oninput="handleSearch()" placeholder="Digite o nome..." autocomplete="off" class="w-full p-3 pl-10 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none focus:ring-2 focus:ring-[#003399] transition-all">
+                    <i data-lucide="search" class="w-4 h-4 absolute left-3 top-3 text-slate-400"></i>
+                    <ul id="searchSuggestions" class="hidden absolute left-0 right-0 mt-2 bg-white border border-slate-200 rounded-xl shadow-xl max-h-48 overflow-y-auto custom-scroll z-50 divide-y divide-slate-100"></ul>
+                </div>
+            </section>
+
+            <section>
+                <label class="text-[10px] font-black text-[#003399] uppercase tracking-widest block mb-4">Filtro de Localidade</label>
+                <select id="filterMun" onchange="updateAll()" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none focus:ring-2 focus:ring-[#003399] transition-all">
+                    <option value="">Todos os Municípios</option>
+                    <option>Amapá</option><option>Calçoene</option><option>Cutias</option><option>Ferreira Gomes</option>
+                    <option>Itaubal</option><option>Laranjal do Jari</option><option>Macapá</option><option>Mazagão</option>
+                    <option>Oiapoque</option><option>Pedra Branca do Amapari</option><option>Porto Grande</option><option>Pracuúba</option>
+                    <option>Santana</option><option>Serra do Navio</option><option>Tartarugalzinho</option><option>Vitória do Jari</option>
+                </select>
+            </section>
+
+            <section>
+                <label class="text-[10px] font-black text-[#003399] uppercase tracking-widest block mb-4">Níveis/Etapas/Modalidades</label>
+                <div class="space-y-3" id="modalidadeFilters">
+                    <label class="flex items-center gap-3 text-xs font-bold text-slate-600 cursor-pointer group">
+                        <input type="checkbox" value="Ensino Fundamental - Anos Iniciais" onchange="updateAll()" class="w-4 h-4 rounded border-slate-300 text-[#003399] focus:ring-[#003399]">
+                        <span class="group-hover:text-[#003399]">Ensino Fundamental - Anos Iniciais</span>
+                    </label>
+                    <label class="flex items-center gap-3 text-xs font-bold text-slate-600 cursor-pointer group">
+                        <input type="checkbox" value="Ensino Fundamental - Anos Finais" onchange="updateAll()" class="w-4 h-4 rounded border-slate-300 text-[#003399] focus:ring-[#003399]">
+                        <span class="group-hover:text-[#003399]">Ensino Fundamental - Anos Finais</span>
+                    </label>
+                    <label class="flex items-center gap-3 text-xs font-bold text-slate-600 cursor-pointer group">
+                        <input type="checkbox" value="Ensino Médio" onchange="updateAll()" class="w-4 h-4 rounded border-slate-300 text-[#003399] focus:ring-[#003399]">
+                        <span class="group-hover:text-[#003399]">Ensino Médio</span>
+                    </label>
+                    <label class="flex items-center gap-3 text-xs font-bold text-slate-600 cursor-pointer group">
+                        <input type="checkbox" value="Ensino Superior" onchange="updateAll()" class="w-4 h-4 rounded border-slate-300 text-[#003399] focus:ring-[#003399]">
+                        <span class="group-hover:text-[#003399]">Ensino Superior</span>
+                    </label>
+                    <label class="flex items-center gap-3 text-xs font-bold text-slate-600 cursor-pointer group">
+                        <input type="checkbox" value="EJA" onchange="updateAll()" class="w-4 h-4 rounded border-slate-300 text-[#003399] focus:ring-[#003399]">
+                        <span class="group-hover:text-[#003399]">Educação de Jovens e Adultos - EJA</span>
+                    </label>
+                    <label class="flex items-center gap-3 text-xs font-bold text-slate-600 cursor-pointer group">
+                        <input type="checkbox" value="Profissional" onchange="updateAll()" class="w-4 h-4 rounded border-slate-300 text-[#003399] focus:ring-[#003399]">
+                        <span class="group-hover:text-[#003399]">Educação Profissional e Tecnológica - EPT</span>
+                    </label>
+                </div>
+            </section>
+
+            <section class="pb-6 lg:pb-0">
+                <label class="text-[10px] font-black text-[#003399] uppercase tracking-widest block mb-4">Esfera Administrativa</label>
+                <div class="flex gap-2">
+                    <button onclick="setRede('Pública')" id="btn-pub" class="flex-1 py-3 lg:py-2 text-[10px] font-black border border-slate-200 rounded-lg hover:bg-slate-50 transition-all uppercase">Pública</button>
+                    <button onclick="setRede('Privada')" id="btn-priv" class="flex-1 py-3 lg:py-2 text-[10px] font-black border border-slate-200 rounded-lg hover:bg-slate-50 transition-all uppercase">Privada</button>
+                </div>
+            </section>
+        </aside>
+
+        <main class="flex-1 flex flex-col overflow-hidden">
+            <div class="bg-white border-b border-slate-200 px-4 lg:px-10 flex gap-6 lg:gap-10 no-print flex-shrink-0 overflow-x-auto whitespace-nowrap custom-scroll">
+                <button onclick="switchTab('listagem')" id="tab-btn-list" class="py-4 lg:py-5 text-xs font-black uppercase tracking-[0.15em] tab-active transition-all">Instituições Ativas</button>
+                <button onclick="switchTab('graficos')" id="tab-btn-graf" class="py-4 lg:py-5 text-xs font-black uppercase tracking-[0.15em] text-slate-400 hover:text-[#003399] transition-all">Estatísticas Avançadas</button>
+                <button onclick="switchTab('cessadas')" id="tab-btn-cess" class="py-4 lg:py-5 text-xs font-black uppercase tracking-[0.15em] text-slate-400 hover:text-[#003399] transition-all">Instituições Cessadas</button>
+            </div>
+
+            <div class="flex-1 overflow-y-auto p-4 lg:p-12 custom-scroll" id="main-scroll-container">
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 lg:gap-6 mb-8 lg:mb-10" id="kpi-container">
+                    <div class="pro-card p-5 lg:p-6 border-b-4 border-b-slate-800">
+                        <div class="flex justify-between items-start mb-2"><p class="text-[10px] font-black text-slate-400 uppercase">Instituições Ativas</p><i data-lucide="school" class="w-4 h-4 text-slate-300 no-print"></i></div>
+                        <h3 id="kpi-inst" class="text-2xl lg:text-3xl font-black text-slate-800">0</h3>
+                    </div>
+                    <div class="pro-card p-5 lg:p-6 border-b-4 border-b-[#003399]">
+                        <div class="flex justify-between items-start mb-2"><p class="text-[10px] font-black text-[#003399] uppercase">Total de Ofertas</p><i data-lucide="book-open" class="w-4 h-4 text-[#003399]/40 no-print"></i></div>
+                        <h3 id="kpi-cursos" class="text-2xl lg:text-3xl font-black text-[#003399]">0</h3>
+                    </div>
+                    <div class="pro-card p-5 lg:p-6 border-b-4 border-b-emerald-500">
+                        <div class="flex justify-between items-start mb-2"><p class="text-[10px] font-black text-slate-400 uppercase">Taxa de Regularidade</p><i data-lucide="check-circle" class="w-4 h-4 text-emerald-300 no-print"></i></div>
+                        <h3 id="kpi-taxa" class="text-2xl lg:text-3xl font-black text-emerald-600">0%</h3>
+                    </div>
+                    <div class="pro-card p-5 lg:p-6 border-b-4 border-b-rose-500">
+                        <div class="flex justify-between items-start mb-2"><p class="text-[10px] font-black text-slate-400 uppercase">Ofertas de Ensino Vencidas</p><i data-lucide="alert-triangle" class="w-4 h-4 text-rose-300 no-print"></i></div>
+                        <h3 id="kpi-pend" class="text-2xl lg:text-3xl font-black text-rose-600">0</h3>
+                    </div>
+                    <div class="pro-card p-5 lg:p-6 border-b-4 border-b-amber-500">
+                        <div class="flex justify-between items-start mb-2"><p class="text-[10px] font-black text-slate-400 uppercase">Em Regularização</p><i data-lucide="clock" class="w-4 h-4 text-amber-300 no-print"></i></div>
+                        <h3 id="kpi-reg" class="text-2xl lg:text-3xl font-black text-amber-600">0</h3>
+                    </div>
+                </div>
+
+                <div id="tab-listagem" class="space-y-6">
+                    <div class="pro-card overflow-hidden w-full">
+                        <div class="overflow-x-auto w-full custom-scroll">
+                            <table class="w-full min-w-[900px] text-left table-auto">
+                                <thead class="bg-slate-50 text-[10px] font-black text-slate-400 uppercase border-b border-slate-200">
+                                    <tr>
+                                        <th class="px-6 lg:px-8 py-5">Instituição / Município</th>
+                                        <th class="px-6 lg:px-8 py-5">Rede</th>
+                                        <th class="px-6 lg:px-8 py-5">Atos Regulatórios por Oferta (Status e Vigência)</th>
+                                        <th class="px-6 lg:px-8 py-5 text-right w-48">Ações</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="table-body" class="divide-y divide-slate-100 bg-white"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="tab-cessadas" class="hidden space-y-6">
+                    <div class="pro-card overflow-hidden w-full">
+                        <div class="bg-slate-50 p-4 border-b flex items-center gap-3">
+                            <i data-lucide="archive" class="text-slate-400 w-5 h-5"></i>
+                            <h3 class="text-xs font-black text-slate-600 uppercase">Histórico de Instituições com Atividades Encerradas</h3>
+                        </div>
+                        <div class="overflow-x-auto w-full custom-scroll">
+                            <table class="w-full min-w-[800px] text-left table-auto">
+                                <thead class="bg-white text-[10px] font-black text-slate-400 uppercase border-b border-slate-200">
+                                    <tr>
+                                        <th class="px-6 lg:px-8 py-5">Instituição / Município</th>
+                                        <th class="px-6 lg:px-8 py-5">Rede</th>
+                                        <th class="px-6 lg:px-8 py-5">Ato de Cessação</th>
+                                        <th class="px-6 lg:px-8 py-5">Data de Encerramento</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="table-cessadas-body" class="divide-y divide-slate-100 bg-white"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="tab-graficos" class="hidden space-y-6 lg:space-y-8">
+                    <div class="grid grid-cols-1 xl:grid-cols-3 gap-6 lg:gap-8">
+                        <div class="pro-card p-6 lg:p-8 xl:col-span-1">
+                            <h4 class="text-[10px] lg:text-xs font-black text-[#003399] uppercase mb-6 lg:mb-8 flex items-center gap-2 italic underline decoration-[#003399]/30 underline-offset-8">Taxa de regularidade</h4>
+                            <div class="h-64 relative w-full flex justify-center"><canvas id="chartCompliance"></canvas></div>
+                        </div>
+                        <div class="pro-card p-6 lg:p-8 xl:col-span-2">
+                            <h4 class="text-[10px] lg:text-xs font-black text-[#003399] uppercase mb-6 lg:mb-8 flex items-center gap-2 italic underline decoration-[#003399]/30 underline-offset-8">Ofertas por Nível de Ensino</h4>
+                            <div class="h-64 relative w-full"><canvas id="chartLevels"></canvas></div>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 xl:grid-cols-2 gap-6 lg:gap-8">
+                        <div class="pro-card p-6 lg:p-8">
+                            <h4 class="text-[10px] lg:text-xs font-black text-[#003399] uppercase mb-6 lg:mb-8 flex items-center gap-2 italic underline decoration-[#003399]/30 underline-offset-8">Distribuição por Município (Geral)</h4>
+                            <div class="h-72 lg:h-80 relative w-full"><canvas id="chartGeo"></canvas></div>
+                        </div>
+                        <div class="pro-card p-6 lg:p-8">
+                            <h4 class="text-[10px] lg:text-xs font-black text-[#003399] uppercase mb-6 lg:mb-8 flex items-center gap-2 italic underline decoration-[#003399]/30 underline-offset-8">Comparativo de Esfera Administrativa</h4>
+                            <div class="h-72 lg:h-80 relative w-full flex justify-center"><canvas id="chartRadar"></canvas></div>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 xl:grid-cols-2 gap-6 lg:gap-8">
+                        <div class="pro-card p-6 lg:p-8">
+                            <h4 class="text-[10px] lg:text-xs font-black text-[#003399] uppercase mb-6 lg:mb-8 flex items-center gap-2 italic underline decoration-[#003399]/30 underline-offset-8">Situação dos Atos por Município</h4>
+                            <div class="h-72 lg:h-80 relative w-full"><canvas id="chartRegMun"></canvas></div>
+                        </div>
+                        <div class="pro-card p-6 lg:p-8">
+                            <h4 class="text-[10px] lg:text-xs font-black text-[#003399] uppercase mb-6 lg:mb-8 flex items-center gap-2 italic underline decoration-[#003399]/30 underline-offset-8">Rede Pública vs Privada por Município</h4>
+                            <div class="h-72 lg:h-80 relative w-full"><canvas id="chartRedeMun"></canvas></div>
+                        </div>
+                    </div>
+
+                    <div class="pro-card overflow-hidden w-full mt-6 lg:mt-8">
+                        <div class="bg-slate-50 p-5 border-b flex items-center gap-3">
+                            <i data-lucide="map" class="text-[#003399] w-5 h-5"></i>
+                            <h3 class="text-xs font-black text-[#003399] uppercase">Indicadores Detalhados por Localidade</h3>
+                        </div>
+                        <div class="overflow-x-auto w-full custom-scroll">
+                            <table class="w-full text-left table-auto">
+                                <thead class="bg-white text-[10px] font-black text-slate-400 uppercase border-b border-slate-200">
+                                    <tr>
+                                        <th class="px-6 py-4">Município</th>
+                                        <th class="px-6 py-4 text-center">Total Instituições</th>
+                                        <th class="px-6 py-4 text-center">Cursos Ofertados</th>
+                                        <th class="px-6 py-4 text-center">Taxa de Regularidade</th>
+                                        <th class="px-6 py-4 text-center">Rede (Pública/Privada)</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="table-mun-metrics" class="divide-y divide-slate-100 bg-white"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </main>
+    </div>
+
+    <script>
+        lucide.createIcons();
+        let selectedRede = "";
+        let chartsInstance = {};
+        
+        // Memória de Certidões Validadas (Simulação de DB)
+        const certidoesEmitidas = {};
+
+        // BASE DE DADOS AMPLIADA E DETALHADA
+        const database = [
+            // ATIVAS
+            { nome: "E. E. Antônio Teixeira Guerra", municipio: "Amapá", rede: "Pública", status_inst: "Ativa", cursos: [{ nivel: "Ensino Fundamental - Anos Iniciais", ato: "Resolução 001/24", vigencia: "31/12/2028", status: "Regular" }, { nivel: "Ensino Fundamental - Anos Finais", ato: "Resolução 12/23", vigencia: "31/12/2025", status: "Vencido" }] },
+            { nome: "E. E. Bom Jesus do Araguari", municipio: "Amapá", rede: "Pública", status_inst: "Ativa", cursos: [{ nivel: "Ensino Fundamental - Anos Iniciais", ato: "Resolução 502/23", vigencia: "15/05/2027", status: "Regular" }, { nivel: "Ensino Fundamental - Anos Finais", ato: "Processo 109/26", vigencia: "Em trâmite", status: "Em Regularização" }] },
+            { nome: "E. E. Rozendo Nascimento Filho", municipio: "Amapá", rede: "Pública", status_inst: "Ativa", cursos: [{ nivel:  "Ensino Fundamental - Anos Iniciais", ato: "Resolução 502/23", vigencia: "15/05/2027", status: "Regular" }, { nivel: "Ensino Fundamental - Anos Finais", ato: "Processo 109/26", vigencia: "Em trâmite", status: "Em Regularização" }] },
+            { nome: "E. M. Oiapoque", municipio: "Oiapoque", rede: "Pública", status_inst: "Ativa", cursos: [{ nivel: "Fundamental - Anos Iniciais", ato: "Dec. 10/22", vigencia: "10/10/2026", status: "Regular" }] },
+            { nome: "Escola de Santana", municipio: "Santana", rede: "Privada", status_inst: "Ativa", cursos: [{ nivel: "Fundamental - Anos Finais", ato: "Res. 11/22", vigencia: "01/01/2025", status: "Vencido" }, { nivel: "Ensino Médio", ato: "Proc. 55/26", vigencia: "Em trâmite", status: "Em Regularização" }] },
+            { nome: "Polo Porto Grande", municipio: "Porto Grande", rede: "Pública", status_inst: "Ativa", cursos: [{ nivel: "EJA", ato: "Port. 05/23", vigencia: "12/08/2027", status: "Regular" }] },
+            { nome: "Escola de Mazagão", municipio: "Mazagão", rede: "Pública", status_inst: "Ativa", cursos: [{ nivel: "Fundamental - Anos Iniciais", ato: "Port. 99/23", vigencia: "30/11/2027", status: "Regular" }] },
+            { nome: "I. T. Tartarugalzinho", municipio: "Tartarugalzinho", rede: "Pública", status_inst: "Ativa", cursos: [{ nivel: "Profissional", ato: "Port. 22/24", vigencia: "15/03/2028", status: "Regular" }] },
+            { nome: "Faculdade Estadual AP", municipio: "Macapá", rede: "Pública", status_inst: "Ativa", cursos: [{ nivel: "Ensino Superior", ato: "Dec. 04/24", vigencia: "01/01/2030", status: "Regular" }] },
+            { nome: "Centro Educacional do Norte", municipio: "Santana", rede: "Privada", status_inst: "Ativa", cursos: [{ nivel: "Ensino Médio", ato: "Res. 88/21", vigencia: "31/12/2025", status: "Vencido" }] },
+            { nome: "E. E. Augusto dos Anjos", municipio: "Macapá", rede: "Pública", status_inst: "Ativa", cursos: [{ nivel: "Fundamental - Anos Finais", ato: "Port. 11/25", vigencia: "10/05/2029", status: "Regular" }] },
+            
+            // CESSADAS
+            { nome: "Instituto Batista Antigo", municipio: "Macapá", rede: "Privada", status_inst: "Cessada", ato_cessacao: "Resolução CEE 105/2024", data_cessacao: "15/08/2024", cursos: [] },
+            { nome: "E. M. Desativada Rural", municipio: "Cutias", rede: "Pública", status_inst: "Cessada", ato_cessacao: "Portaria 012/2023", data_cessacao: "10/02/2023", cursos: [] },
+            { nome: "Colégio Progresso", municipio: "Santana", rede: "Privada", status_inst: "Cessada", ato_cessacao: "Resolução CEE 008/2025", data_cessacao: "20/01/2025", cursos: [] }
+        ];
+
+        function toggleSidebar() {
+            document.getElementById('sidebar').classList.toggle('-translate-x-full');
+            document.getElementById('sidebarOverlay').classList.toggle('hidden');
+        }
+
+        function handleSearch() {
+            const val = document.getElementById('searchInput').value.toLowerCase();
+            const suggBox = document.getElementById('searchSuggestions');
+            if (!val) { suggBox.classList.add('hidden'); updateAll(); return; }
+            
+            const matches = [...new Set(database.map(i => i.nome))].filter(nome => nome.toLowerCase().includes(val));
+            if (matches.length > 0) {
+                suggBox.innerHTML = matches.map(m => `<li onclick="selectSuggestion('${m}')" class="px-4 py-3 text-xs font-bold text-slate-700 hover:bg-slate-50 cursor-pointer transition-colors">${m}</li>`).join('');
+                suggBox.classList.remove('hidden');
+            } else {
+                suggBox.innerHTML = `<li class="px-4 py-3 text-xs text-slate-400 italic">Nenhum resultado...</li>`;
+                suggBox.classList.remove('hidden');
+            }
+            updateAll();
+        }
+
+        function selectSuggestion(nome) {
+            document.getElementById('searchInput').value = nome;
+            document.getElementById('searchSuggestions').classList.add('hidden');
+            updateAll();
+        }
+
+        document.addEventListener('click', (e) => {
+            const suggBox = document.getElementById('searchSuggestions');
+            if(suggBox && !e.target.closest('#searchInput') && !e.target.closest('#searchSuggestions')) suggBox.classList.add('hidden');
+        });
+
+        function switchTab(tab) {
+            document.getElementById('tab-listagem').classList.toggle('hidden', tab !== 'listagem');
+            document.getElementById('tab-graficos').classList.toggle('hidden', tab !== 'graficos');
+            document.getElementById('tab-cessadas').classList.toggle('hidden', tab !== 'cessadas');
+            
+            const inactiveClass = "py-4 lg:py-5 text-xs font-black uppercase tracking-[0.15em] text-slate-400 hover:text-[#003399] transition-all";
+            const activeClass = "py-4 lg:py-5 text-xs font-black uppercase tracking-[0.15em] tab-active transition-all";
+            
+            document.getElementById('tab-btn-list').className = tab === 'listagem' ? activeClass : inactiveClass;
+            document.getElementById('tab-btn-graf').className = tab === 'graficos' ? activeClass : inactiveClass;
+            document.getElementById('tab-btn-cess').className = tab === 'cessadas' ? activeClass : inactiveClass;
+            
+            if(tab === 'graficos') setTimeout(() => renderAdvancedCharts(getFilteredData().ativas), 50);
+        }
+
+        function setRede(rede) {
+            selectedRede = (selectedRede === rede) ? "" : rede;
+            const activeBtn = "flex-1 py-3 lg:py-2 text-[10px] font-black border rounded-lg bg-[#003399] text-white transition-all uppercase";
+            const inactiveBtn = "flex-1 py-3 lg:py-2 text-[10px] font-black border border-slate-200 rounded-lg hover:bg-slate-50 transition-all uppercase text-slate-600";
+            document.getElementById('btn-pub').className = selectedRede === 'Pública' ? activeBtn : inactiveBtn;
+            document.getElementById('btn-priv').className = selectedRede === 'Privada' ? activeBtn : inactiveBtn;
+            updateAll();
+        }
+
+        function getFilteredData() {
+            const textSearch = document.getElementById('searchInput').value.toLowerCase();
+            const mun = document.getElementById('filterMun').value;
+            const levels = Array.from(document.querySelectorAll('#modalidadeFilters input:checked')).map(i => i.value);
+
+            const filtered = database.filter(inst => {
+                const matchSearch = !textSearch || inst.nome.toLowerCase().includes(textSearch);
+                const matchMun = !mun || inst.municipio === mun;
+                const matchRede = !selectedRede || inst.rede === selectedRede;
+                const matchLevel = levels.length === 0 || inst.cursos.some(c => levels.includes(c.nivel));
+                return matchSearch && matchMun && matchRede && matchLevel;
+            });
+
+            return {
+                ativas: filtered.filter(i => i.status_inst === 'Ativa'),
+                cessadas: filtered.filter(i => i.status_inst === 'Cessada')
+            };
+        }
+
+        function updateAll() {
+            const data = getFilteredData();
+            renderTable(data.ativas);
+            renderCessadas(data.cessadas);
+            updateKPIs(data.ativas);
+            if(!document.getElementById('tab-graficos').classList.contains('hidden')){
+                renderAdvancedCharts(data.ativas);
+            }
+            document.getElementById('print-timestamp').innerText = new Date().toLocaleString('pt-BR');
+        }
+
+        function updateKPIs(data) {
+            let cursosTotal = 0, reg = 0, pend = 0, emReg = 0;
+            data.forEach(inst => {
+                inst.cursos.forEach(c => {
+                    cursosTotal++;
+                    if(c.status === 'Regular') reg++; 
+                    else if(c.status === 'Vencido') pend++;
+                    else emReg++;
+                });
+            });
+            document.getElementById('kpi-inst').innerText = data.length;
+            document.getElementById('kpi-cursos').innerText = cursosTotal;
+            document.getElementById('kpi-pend').innerText = pend;
+            document.getElementById('kpi-reg').innerText = emReg;
+            document.getElementById('kpi-taxa').innerText = cursosTotal > 0 ? Math.round((reg/cursosTotal)*100) + "%" : "0%";
+        }
+
+        // RENDERIZAÇÃO DA TABELA PRINCIPAL
+        function renderTable(data) {
+            const body = document.getElementById('table-body');
+            if(data.length === 0) {
+                body.innerHTML = `<tr><td colspan="4" class="px-8 py-10 text-center text-slate-400 font-bold text-xs uppercase">Nenhuma instituição ativa encontrada.</td></tr>`;
+                return;
+            }
+
+            body.innerHTML = data.map(inst => {
+                const atosHtml = inst.cursos.map(c => {
+                    let colorClass = ""; let icon = "";
+                    if(c.status === 'Regular') { colorClass = "bg-emerald-50 border-emerald-200 text-emerald-700"; icon = "check-circle"; }
+                    else if(c.status === 'Vencido') { colorClass = "bg-rose-50 border-rose-200 text-rose-700"; icon = "x-circle"; }
+                    else { colorClass = "bg-amber-50 border-amber-200 text-amber-700"; icon = "clock"; }
+                    
+                    return `
+                    <div class="flex items-center justify-between p-2 mb-1 rounded-md border ${colorClass} text-[10px]">
+                        <div class="flex flex-col">
+                            <span class="font-black uppercase">${c.nivel}</span>
+                            <span class="text-slate-500 font-semibold">${c.ato} (Vigência: ${c.vigencia})</span>
+                        </div>
+                        <div class="flex items-center gap-1 font-black uppercase tracking-wider px-2 py-1 bg-white/50 rounded">
+                            <i data-lucide="${icon}" class="w-3 h-3"></i> ${c.status}
+                        </div>
+                    </div>`;
+                }).join('');
+                
+                return `
+                    <tr class="hover:bg-slate-50/50 transition-all group border-b border-slate-100">
+                        <td class="px-6 lg:px-8 py-4 lg:py-5 align-top">
+                            <div class="font-black text-slate-800 text-sm group-hover:text-[#003399] transition-colors">${inst.nome}</div>
+                            <div class="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1"><i data-lucide="map-pin" class="w-3 h-3 inline pb-0.5"></i> ${inst.municipio}</div>
+                        </td>
+                        <td class="px-6 lg:px-8 py-4 lg:py-5 align-top text-xs font-bold text-slate-600">${inst.rede}</td>
+                        <td class="px-6 lg:px-8 py-4 lg:py-5 align-top min-w-[300px]">${atosHtml}</td>
+                        <td class="px-6 lg:px-8 py-4 lg:py-5 text-right align-top">
+                            <button onclick="gerarCertidao('${inst.nome}')" class="w-full justify-center bg-[#003399] hover:bg-blue-800 text-white px-3 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all shadow-md flex items-center gap-2 no-print">
+                                <i data-lucide="award" class="w-4 h-4"></i> Emitir Certidão
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+            lucide.createIcons();
+        }
+
+        function renderCessadas(data) {
+            const body = document.getElementById('table-cessadas-body');
+            if(data.length === 0) {
+                body.innerHTML = `<tr><td colspan="4" class="px-8 py-10 text-center text-slate-400 font-bold text-xs uppercase">Nenhum registro de instituição cessada.</td></tr>`;
+                return;
+            }
+            body.innerHTML = data.map(inst => `
+                <tr class="bg-slate-50/50 border-b border-slate-100">
+                    <td class="px-6 lg:px-8 py-4 text-slate-600"><div class="font-bold text-sm">${inst.nome}</div><div class="text-[9px] uppercase tracking-widest mt-1">${inst.municipio}</div></td>
+                    <td class="px-6 lg:px-8 py-4 text-xs font-bold text-slate-500">${inst.rede}</td>
+                    <td class="px-6 lg:px-8 py-4"><span class="bg-slate-200 text-slate-700 text-xs font-bold px-2 py-1 rounded border border-slate-300">${inst.ato_cessacao}</span></td>
+                    <td class="px-6 lg:px-8 py-4 text-xs font-black text-slate-500 flex items-center gap-2"><i data-lucide="calendar" class="w-4 h-4"></i> ${inst.data_cessacao}</td>
+                </tr>
+            `).join('');
+            lucide.createIcons();
+        }
+
+        // GERAÇÃO E VALIDAÇÃO DE CERTIDÃO
+        function gerarHashCertidao(nome) {
+            const dataStr = new Date().toISOString().replace(/[-:T.]/g, '').substring(0,14);
+            const rdm = Math.floor(Math.random() * 9000) + 1000;
+            return `CEE-AP-${dataStr}-${rdm}`;
+        }
+
+        function gerarCertidao(nomeInstituicao) {
+            const inst = database.find(i => i.nome === nomeInstituicao);
+            if (!inst) return;
+
+            const dataAtual = new Date().toLocaleDateString('pt-BR');
+            const hash = gerarHashCertidao(inst.nome);
+            certidoesEmitidas[hash] = { nome: inst.nome, data: dataAtual };
+
+            const cursosHtml = inst.cursos.map(c => {
+                let statusColor = c.status === 'Regular' ? 'text-emerald-600' : (c.status === 'Vencido' ? 'text-rose-600' : 'text-amber-600');
+                return `<li class="mb-4 bg-white p-4 rounded border border-slate-200 shadow-sm"><span class="font-black text-[#003399] text-sm uppercase">${c.nivel}</span> <br> <div class="mt-2 text-sm text-slate-600 grid grid-cols-2 gap-2"><p>Ato Regulatório: <strong class="text-slate-800">${c.ato}</strong></p><p>Vigência: <strong>${c.vigencia}</strong></p><p>Status do Ato: <span class="${statusColor} font-black uppercase tracking-wider">${c.status}</span></p></div></li>`
+            }).join('');
+
+            const certidaoWindow = window.open('', '_blank', 'width=900,height=800');
+            certidaoWindow.document.write(`
+                <html><head><title>Certidão - ${inst.nome}</title><script src="https://cdn.tailwindcss.com"><\/script></head>
+                <body class="p-10 font-sans text-slate-800 bg-white" onload="window.print()">
+                    <div class="border-[6px] border-[#003399] p-10 rounded-2xl relative max-w-4xl mx-auto mt-5">
+                        <div class="text-center mb-8 border-b-2 border-slate-100 pb-8 flex flex-col items-center">
+                            <img src="https://scontent.fmcp1-1.fna.fbcdn.net/v/t39.30808-6/616032336_1190834643222948_3300082200552265159_n.png?_nc_cat=101&ccb=1-7&_nc_sid=2a1932&_nc_ohc=krM6LeQ8zSwQ7kNvwEvu60A&_nc_oc=AdkoApmGuBTFzX8j5wwlJu4Oatypc_ttGQV7gjBxLrusi-pFWFEpMJgBojG9l6zeM1hU67D494p6fPkYal9V7NxS&_nc_zt=23&_nc_ht=scontent.fmcp1-1.fna&_nc_gid=afFyza42hgjT2J012C48BA&_nc_ss=8&oh=00_AfxVR3mHfES3ohEL0ysvYUfDOjBstNndFceLN-_ITpmlsQ&oe=69BD12CD" class="h-24 mb-4" alt="Logo">
+                            <h1 class="text-2xl font-black text-[#003399] uppercase tracking-widest">Conselho Estadual de Educação do Amapá</h1>
+                            <h2 class="text-lg font-bold text-slate-500 uppercase tracking-widest mt-2">Certidão de Regularidade Institucional</h2>
+                        </div>
+                        <div class="text-lg leading-relaxed mb-8 text-justify">
+                            Certificamos, para os devidos fins de direito e validação documental, que a instituição de ensino denominada <strong class="uppercase text-[#003399]">${inst.nome}</strong>, estabelecida no município de <strong>${inst.municipio}</strong>, operante na esfera administrativa <strong>${inst.rede}</strong>, apresenta os seguintes tipos de oferta educacional e respectivos atos regulatórios registrados oficialmente na base de dados deste Conselho:
+                        </div>
+                        <div class="bg-slate-50 p-6 rounded-xl border border-slate-200 mb-12"><ul class="list-none">${cursosHtml}</ul></div>
+                        <div class="flex justify-between items-end mt-16 pt-8 border-t-2 border-slate-800">
+                            <div>
+                                <p class="font-black text-slate-800 uppercase text-sm">Autenticação do Sistema CEE/AP</p>
+                                <p class="text-xs text-slate-500 font-bold mt-1">Gerado eletronicamente em: ${dataAtual}</p>
+                            </div>
+                            <div class="text-right">
+                                <div class="bg-slate-100 p-3 border border-slate-300 inline-block mb-2"><img src="https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${hash}" alt="QR Code" class="h-20 w-20"></div>
+                                <p class="text-[10px] font-bold text-slate-500 uppercase">Código de Verificação:</p>
+                                <p class="text-sm font-black text-[#003399] tracking-widest">${hash}</p>
+                            </div>
+                        </div>
+                    </div>
+                </body></html>
+            `);
+            certidaoWindow.document.close();
+            document.getElementById('certCodeInput').value = hash;
+        }
+
+        function openValidationModal() { document.getElementById('validationModal').classList.remove('hidden'); document.getElementById('validationResult').classList.add('hidden'); }
+        function closeValidationModal() { document.getElementById('validationModal').classList.add('hidden'); }
+        function validateCertificate() {
+            const code = document.getElementById('certCodeInput').value.trim();
+            const resultBox = document.getElementById('validationResult');
+            resultBox.classList.remove('hidden', 'bg-emerald-100', 'text-emerald-700', 'bg-rose-100', 'text-rose-700');
+            
+            if(certidoesEmitidas[code]) {
+                const info = certidoesEmitidas[code];
+                resultBox.classList.add('bg-emerald-100', 'text-emerald-700');
+                resultBox.innerHTML = `<i data-lucide="check-circle" class="w-6 h-6 mx-auto mb-2"></i><strong>CERTIDÃO VÁLIDA E AUTÊNTICA</strong><br><span class="text-[10px] uppercase mt-2 block">Instituição: ${info.nome}<br>Emitida em: ${info.data}</span>`;
+            } else {
+                resultBox.classList.add('bg-rose-100', 'text-rose-700');
+                resultBox.innerHTML = `<i data-lucide="x-circle" class="w-6 h-6 mx-auto mb-2"></i><strong>CÓDIGO INVÁLIDO OU NÃO ENCONTRADO</strong><br><span class="text-[10px] uppercase mt-2 block">Verifique se o código foi digitado corretamente.</span>`;
+            }
+            lucide.createIcons();
+        }
+
+        // ESTATÍSTICAS AVANÇADAS COM NOVAS MÉTRICAS POR LOCALIDADE
+        function renderAdvancedCharts(data) {
+            Object.values(chartsInstance).forEach(chart => chart.destroy());
+
+            let stReg = 0, stPend = 0, stEmReg = 0;
+            let levels = {};
+            let munStats = {}; // Nova estrutura para métricas locais
+            let redeData = { 'Pública': { fund:0, med:0, sup:0, ept:0 }, 'Privada': { fund:0, med:0, sup:0, ept:0 } };
+
+            data.forEach(inst => {
+                let m = inst.municipio;
+                // Inicia o contador por município se não existir
+                if(!munStats[m]) munStats[m] = { inst: 0, cursos: 0, reg: 0, pend: 0, emReg: 0, pub: 0, priv: 0 };
+                
+                munStats[m].inst++;
+                if(inst.rede === 'Pública') munStats[m].pub++;
+                if(inst.rede === 'Privada') munStats[m].priv++;
+
+                inst.cursos.forEach(c => {
+                    munStats[m].cursos++;
+                    if(c.status === 'Regular') { stReg++; munStats[m].reg++; }
+                    else if (c.status === 'Vencido') { stPend++; munStats[m].pend++; }
+                    else { stEmReg++; munStats[m].emReg++; }
+                    
+                    levels[c.nivel] = (levels[c.nivel] || 0) + 1;
+                    
+                    if(inst.rede) {
+                        let cat = "outros";
+                        if(c.nivel.includes("Fundamental")) cat = "fund";
+                        else if(c.nivel.includes("Médio")) cat = "med";
+                        else if(c.nivel.includes("Superior")) cat = "sup";
+                        else if(c.nivel.includes("Profissional") || c.nivel.includes("EJA")) cat = "ept";
+                        if(redeData[inst.rede] && redeData[inst.rede][cat] !== undefined) redeData[inst.rede][cat]++;
+                    }
+                });
+            });
+
+            // Preparação dos Labels e Dados Ordenados (por volume de instituições)
+            const munLabels = Object.keys(munStats).sort((a,b) => munStats[b].inst - munStats[a].inst);
+            const topMunLabels = munLabels.slice(0, 8); // Para o gráfico geral menor
+
+            // Chart 1: Status Jurídico Global
+            chartsInstance.c1 = new Chart(document.getElementById('chartCompliance'), {
+                type: 'doughnut',
+                data: { labels: ['Regulares / Vigentes', 'Vencidos', 'Em Regularização'], datasets: [{ data: [stReg, stPend, stEmReg], backgroundColor: ['#10B981', '#F43F5E', '#F59E0B'], borderWidth: 0 }] },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { font: { size: 10, family: 'Inter' } } } }, cutout: '70%' }
+            });
+
+            // Chart 2: Níveis de Ensino Global
+            chartsInstance.c2 = new Chart(document.getElementById('chartLevels'), {
+                type: 'bar',
+                data: { labels: Object.keys(levels), datasets: [{ label: 'Qtd de Cursos', data: Object.values(levels), backgroundColor: '#003399', borderRadius: 6 }] },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, grid: { borderDash: [4, 4] } }, x: { grid: { display: false }, ticks: { font: { size: 9 } } } } }
+            });
+
+            // Chart 3: Municípios (Geral Top 8)
+            chartsInstance.c3 = new Chart(document.getElementById('chartGeo'), {
+                type: 'bar',
+                data: { labels: topMunLabels, datasets: [{ label: 'Instituições', data: topMunLabels.map(m => munStats[m].inst), backgroundColor: '#64748B', borderRadius: 4 }] },
+                options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true } } }
+            });
+
+            // Chart 4: Radar Pública vs Privada Global
+            chartsInstance.c4 = new Chart(document.getElementById('chartRadar'), {
+                type: 'radar',
+                data: {
+                    labels: ['Ens. Fundamental', 'Ens. Médio', 'Ens. Superior', 'EPT/EJA'],
+                    datasets: [
+                        { label: 'Pública', data: [redeData['Pública'].fund, redeData['Pública'].med, redeData['Pública'].sup, redeData['Pública'].ept], backgroundColor: 'rgba(0, 51, 153, 0.2)', borderColor: '#003399', pointBackgroundColor: '#003399' },
+                        { label: 'Privada', data: [redeData['Privada'].fund, redeData['Privada'].med, redeData['Privada'].sup, redeData['Privada'].ept], backgroundColor: 'rgba(245, 158, 11, 0.2)', borderColor: '#F59E0B', pointBackgroundColor: '#F59E0B' }
+                    ]
+                },
+                options: { responsive: true, maintainAspectRatio: false, scales: { r: { beginAtZero: true } } }
+            });
+
+            // NOVO: Chart 5 - Situação dos Atos por Município (Empilhado)
+            chartsInstance.c5 = new Chart(document.getElementById('chartRegMun'), {
+                type: 'bar',
+                data: {
+                    labels: munLabels,
+                    datasets: [
+                        { label: 'Regular', data: munLabels.map(m => munStats[m].reg), backgroundColor: '#10B981' },
+                        { label: 'Em Regularização', data: munLabels.map(m => munStats[m].emReg), backgroundColor: '#F59E0B' },
+                        { label: 'Vencido', data: munLabels.map(m => munStats[m].pend), backgroundColor: '#F43F5E' }
+                    ]
+                },
+                options: { 
+                    responsive: true, maintainAspectRatio: false, 
+                    scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } },
+                    plugins: { legend: { position: 'top', labels: { boxWidth: 12, font: { size: 10 } } } }
+                }
+            });
+
+            // NOVO: Chart 6 - Rede Pública vs Privada por Município (Agrupado)
+            chartsInstance.c6 = new Chart(document.getElementById('chartRedeMun'), {
+                type: 'bar',
+                data: {
+                    labels: munLabels,
+                    datasets: [
+                        { label: 'Pública', data: munLabels.map(m => munStats[m].pub), backgroundColor: '#003399', borderRadius: 4 },
+                        { label: 'Privada', data: munLabels.map(m => munStats[m].priv), backgroundColor: '#64748B', borderRadius: 4 }
+                    ]
+                },
+                options: { 
+                    responsive: true, maintainAspectRatio: false, 
+                    scales: { y: { beginAtZero: true } },
+                    plugins: { legend: { position: 'top', labels: { boxWidth: 12, font: { size: 10 } } } }
+                }
+            });
+
+            // NOVO: Preencher Tabela Analítica por Município
+            const tableMun = document.getElementById('table-mun-metrics');
+            if(munLabels.length === 0) {
+                tableMun.innerHTML = `<tr><td colspan="5" class="px-6 py-8 text-center text-slate-400 font-bold text-xs uppercase">Sem dados disponíveis.</td></tr>`;
+                return;
+            }
+
+            tableMun.innerHTML = munLabels.map(m => {
+                let s = munStats[m];
+                let taxa = s.cursos > 0 ? Math.round((s.reg / s.cursos) * 100) : 0;
+                let colorClass = taxa >= 80 ? 'text-emerald-600' : (taxa >= 50 ? 'text-amber-500' : 'text-rose-600');
+                
+                return `
+                    <tr class="hover:bg-slate-50 transition-colors text-xs font-semibold text-slate-600 border-b border-slate-50">
+                        <td class="px-6 py-4 font-black text-slate-800 uppercase tracking-wide">${m}</td>
+                        <td class="px-6 py-4 text-center font-bold">${s.inst}</td>
+                        <td class="px-6 py-4 text-center">${s.cursos}</td>
+                        <td class="px-6 py-4 text-center font-black ${colorClass}">${taxa}%</td>
+                        <td class="px-6 py-4 text-center">
+                            <span class="text-[#003399] font-black">${s.pub} Pública</span> <span class="text-slate-300 mx-1">|</span> 
+                            <span class="text-slate-500 font-black">${s.priv} Privada</span>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        updateAll();
+    </script>
+</body>
+</html>
